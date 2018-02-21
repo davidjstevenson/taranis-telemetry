@@ -1,0 +1,27 @@
+Battery {
+    mah = 1500,
+    cells = 3,
+    low = 10.5,
+    high = 12.6
+}
+
+Battery {
+    mah = 1800,
+    cells = 4,
+    low = 14.0,
+    high = 17.4
+}
+
+Battery {
+    mah = 2200,
+    cells = 3,
+    low = 10.5,
+    high = 12.6
+}
+
+Battery {
+    mah = 2800,
+    cells = 3,
+    low = 10.5,
+    high = 12.6
+}

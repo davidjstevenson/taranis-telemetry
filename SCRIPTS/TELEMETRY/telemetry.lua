@@ -1,3 +1,4 @@
+local BATT_FILE = "/SCRIPTS/TELEMETRY/batt.dat"
 
 local FOOTER_Y = 53
 local FOOTER_TEXT_OFFSET = 3
@@ -10,39 +11,28 @@ local high = 12.6
 local mode = ""
 local armed = false
 
-local batteries = {
-    {
-        mah=1500,
-        cells=3,
-        low=10.5,
-        high=12.6
-    },
-    {
-        mah=1800,
-        cells=4,
-        low=14.0,
-        high=17.4
-    },
-    {
-        mah=2200,
-        cells=3,
-        low=10.5,
-        high=12.6
-    },
-    {
-        mah=2800,
-        cells=3,
-        low=10.5,
-        high=12.6
-    },
-}
-
+local batteries = {}
 local batt_index = 1
-local batt_count = #batteries
+
+function Battery(entry)
+    batteries[#batteries + 1] = entry
+end
+
+local function save_batteries()
+    local file = io.open(BATT_FILE, "w")
+    for i=1,#batteries do
+        local entry = string.format(
+            "Battery {\n    mah = %d,\n    cells = %d,\n    low = %.1f,\n    high = %.1f\n}\n",
+            batteries[i].mah, batteries[i].cells,
+            batteries[i].low, batteries[i].high)
+        io.write(file, entry)
+    end
+    io.close(file)
+end
 
 -- UTIL FUNCTIONS --
 
-function round(val, decimal)
+local function round(val, decimal)
     if (decimal) then
         return math.floor( (val * 10^decimal) + 0.5) / (10^decimal)
     else
@@ -50,7 +40,7 @@ function round(val, decimal)
     end
 end
 
-function formatTime(s)
+local function formatTime(s)
     return string.format("%.2d:%.2d:%.2d", s/(60*60), s/60%60, s%60)
 end
 
@@ -77,7 +67,7 @@ local function parseTmp1()
     end
 end
 
-function drawFooter()
+local function drawFooter()
     lcd.drawLine(0, FOOTER_Y, 212, FOOTER_Y, SOLID, FORCE)
 
     local datetime = getDateTime()
@@ -112,14 +102,14 @@ function drawFooter()
         string.format("%.1fV", low), SMLSIZE)
 end
 
-function drawTimers()
+local function drawTimers()
     local t1 = model.getTimer(0).value
     local t2 = model.getTimer(1).value
     lcd.drawText(6, 12, formatTime(t1), MIDSIZE)
     lcd.drawText(6, 32, formatTime(t2), MIDSIZE)
 end
 
-function drawFuel()
+local function drawFuel()
     local xoffset = 72
     local vfas = getValue("VFAS")
     local fuel = getValue("Fuel")
@@ -148,10 +138,7 @@ function drawFuel()
     lcd.drawText(xoffset + 30, 37, "00:00:00", MIDSIZE)
 end
 
-function drawData()
-end
-
-function drawRSSI()
+local function drawRSSI()
     local rssi = getValue("RSSI")
 
     local p = round(9 * (rssi - 45) / (90 - 45))
@@ -162,34 +149,35 @@ function drawRSSI()
     lcd.drawText(180, 34, rssi, 0)
 end
 
-function drawArm()
+local function drawArm()
     if armed then
         lcd.drawText(177, 7, "ARMED", SMLSIZE)
     end
 end
 
-function next_battery()
+local function next_battery()
     batt_index = batt_index + 1
-    if batt_index > batt_count then
+    if batt_index > #batteries then
         batt_index = 1
     end
+    save_batteries()
 end
 
-function prev_battery()
+local function prev_battery()
     batt_index = batt_index - 1
     if batt_index == 0 then
-        batt_index = batt_count
+        batt_index = #batteries
     end
 end
 
-function update()
+local function update()
     mah = batteries[batt_index].mah
     cells = batteries[batt_index].cells
     high = batteries[batt_index].high
     low = batteries[batt_index].low
 end
 
-function show_batteries(event)
+local function show_batteries(event)
     if event == EVT_PLUS_FIRST then
         prev_battery()
     elseif event == EVT_MINUS_FIRST then
@@ -198,7 +186,7 @@ function show_batteries(event)
 
     lcd.clear()
 
-    for i=1,batt_count do
+    for i=1,#batteries do
         local flags = 0
         if i == batt_index then
             flags = INVERS
@@ -210,7 +198,7 @@ function show_batteries(event)
     end
 end
 
-function show_main(event)
+local function show_main(event)
     lcd.clear()
 
     if event == EVT_PLUS_FIRST then
@@ -225,7 +213,6 @@ function show_main(event)
     drawFooter()
     drawTimers()
     drawFuel()
-    drawData()
     drawRSSI()
     drawArm()
 end
@@ -246,5 +233,11 @@ local function run(event)
         show_batteries(event)
     end
 end
- 
-return{run=run}
+
+local function init()
+    dofile(BATT_FILE)
+end
+
+local function background() end
+
+return{run=run, background=background, init=init}
