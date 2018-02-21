@@ -160,7 +160,6 @@ local function next_battery()
     if batt_index > #batteries then
         batt_index = 1
     end
-    save_batteries()
 end
 
 local function prev_battery()
@@ -177,24 +176,142 @@ local function update()
     low = batteries[batt_index].low
 end
 
-local function show_batteries(event)
-    if event == EVT_PLUS_FIRST then
-        prev_battery()
-    elseif event == EVT_MINUS_FIRST then
+local function battery_down()
+    if batt_index < #batteries then
+        batteries[batt_index], batteries[batt_index + 1] =
+            batteries[batt_index + 1], batteries[batt_index]
         next_battery()
+    end
+end
+
+local function battery_up()
+    if batt_index > 0 then
+        batteries[batt_index], batteries[batt_index - 1] =
+            batteries[batt_index - 1], batteries[batt_index]
+        prev_battery()
+    end
+end
+
+local EDIT_MODE_NONE = 0
+local EDIT_MODE_SELECT = 1
+local EDIT_MODE_EDIT = 2
+
+local edit_index = 1
+local edit_mode = EDIT_MODE_NONE
+local edit_index_max = 5
+
+local function next_edit()
+    if edit_index > 1 then
+        edit_index = edit_index - 1
+    end
+end
+
+local function prev_edit()
+    if edit_index < edit_index_max then
+        edit_index = edit_index + 1
+    end
+end
+
+local BATT_SCR_MODE_SHOW = 0
+local BATT_SCR_MODE_EDIT = 1
+local BATT_SCR_MODE_MOVE = 2
+local BATT_SCR_MODE_NEW  = 3
+
+local batt_screen_mode = 0
+local flags = 0
+
+local function set_flags(x, y)
+    if batt_index == x then
+        if edit_mode == EDIT_MODE_SELECT then
+            if edit_index == y then
+                flags = INVERS
+            else
+                flags = 0
+            end
+        elseif edit_mode == EDIT_MODE_EDIT then
+            if edit_index == y then
+                flags = INVERS + BLINK
+            else
+                flags = 0
+            end
+        else
+            flags = INVERS
+        end
+    else
+        flags = 0
+    end
+end
+
+local function show_batteries(event)
+    -- NOTE: BATT_SCR_MODE_EDIT and edit_mode hold similar info - combine these two?
+    if event == EVT_PLUS_FIRST then
+        if batt_screen_mode == BATT_SCR_MODE_EDIT then
+            if edit_mode == EDIT_MODE_EDIT then
+                if edit_index == 1 then
+                    battery_up()
+                end
+            else
+                prev_edit()
+            end
+        else
+            prev_battery()
+        end
+    elseif event == EVT_MINUS_FIRST then
+        if batt_screen_mode == BATT_SCR_MODE_EDIT then
+            if edit_mode == EDIT_MODE_EDIT then
+                if edit_index == 1 then
+                    battery_down()
+                end
+            else
+                next_edit()
+            end
+        else
+            next_battery()
+        end
+    elseif event == EVT_ENTER_BREAK then
+        if edit_mode == EDIT_MODE_NONE then
+            batt_screen_mode = BATT_SCR_MODE_EDIT
+            edit_mode = EDIT_MODE_SELECT
+            edit_index = 1
+        elseif edit_mode == EDIT_MODE_SELECT then
+            edit_mode = EDIT_MODE_EDIT
+        else
+            edit_mode = EDIT_MODE_SELECT
+        end
+    elseif event == EVT_EXIT_BREAK then
+        batt_screen_mode = BATT_SCR_MODE_SHOW
+        edit_mode = EDIT_MODE_NONE
     end
 
     lcd.clear()
 
     for i=1,#batteries do
-        local flags = 0
-        if i == batt_index then
-            flags = INVERS
+        local y = 4 + (i-1)*10
+        local x = 5
+        set_flags(i, 1)
+        if batt_screen_mode == BATT_SCR_MODE_EDIT then
+            if i == batt_index then
+                lcd.drawText(x, y, "[=]", flags)
+                set_flags(i, 0)
+                lcd.drawText(lcd.getLastPos(), y, " ", flags)
+                x = lcd.getLastPos()
+            end
         end
-        lcd.drawText(5, 4 + (i-1)*10,
-        string.format("%dmAh, %dS, %.1fV - %.1fV",
-            batteries[i].mah, batteries[i].cells,
-            batteries[i].low, batteries[i].high), flags)
+
+        set_flags(i, 2)
+        lcd.drawText(x, y, string.format("%dmAh", batteries[i].mah), flags)
+        set_flags(i, 0)
+        lcd.drawText(lcd.getLastPos(), y, ", ", flags)
+        set_flags(i, 3)
+        lcd.drawText(lcd.getLastPos(), y, string.format("%dS", batteries[i].cells), flags)
+        set_flags(i, 0)
+        lcd.drawText(lcd.getLastPos(), y, ", ", flags)
+        set_flags(i, 4)
+        lcd.drawText(lcd.getLastPos(), y, string.format("%.1fV", batteries[i].low), flags)
+        set_flags(i, 0)
+        lcd.drawText(lcd.getLastPos(), y, " - ", flags)
+        set_flags(i, 5)
+        lcd.drawText(lcd.getLastPos(), y, string.format("%.1fV", batteries[i].high), flags)
     end
 end
 
@@ -217,12 +334,13 @@ local function show_main(event)
     drawArm()
 end
 
-local screen = 0
+local screen = 1
 
 local function run(event)
     if event == EVT_MENU_BREAK then
         screen = screen + 1
         if screen > 1 then
+            save_batteries()
             screen = 0
         end
     end
